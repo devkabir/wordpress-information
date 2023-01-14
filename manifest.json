@@ -1,0 +1,13 @@
+{
+    "manifest_version": 3,
+    "name": "WordPress Information",
+    "description": "Get all info about a wordpress website - For Developers",
+    "version": "1.0",
+    "action": {
+        "default_popup": "popup.html"
+    },
+    "permissions": [
+        "activeTab",
+        "scripting"
+    ]
+}

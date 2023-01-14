@@ -38,7 +38,7 @@ chrome.runtime.onMessage.addListener(function (request, sender, sendResponse) {
     generate_html(wp_meta, request.metas)
     generate_html(wp_plugin, request.plugins)
     generate_html(wp_theme, request.themes);
-    generate_html(wp_library, request.library);
+    generate_html(wp_library, request.libraries);
 
 });
 
@@ -50,36 +50,51 @@ document.addEventListener('DOMContentLoaded', async function () {
                 metas: {},
                 plugins: {},
                 themes: {},
-                library:{}
+                libraries: {},
+                packages: {},
             }, metas = document.querySelectorAll("meta[name='generator']"),
             nodes = document.querySelectorAll('link[href], script[src]');
+        const extract_libraries = (source, data) => {
+            let regex = /\/assets\/(css|js)\/([\w-]+)+/i
+            regex = /\/([^\/]+)(?!.*(style|styles|theme|themes|script|scripts))\.min\.js/i
+            let match = source.match(regex)
+            if (match) {
+                console.log(match)
+                data['libraries'][match[1]] = {
+                    name: match[1]
+                }
+            }
+        };
         const get_data = (node, data, type) => {
             if (node !== null) {
-                let regex = type === 'plugins' ? /\/plugins\/([a-z0-9-_]+)\/.*?ver=([0-9.]+)/i : /\/themes\/([a-z0-9-_]+)\/.*?ver=([0-9.]+)/i
-                let libRgx = /\/([a-z-_]+)\.min\.*/i
-                let theme_plug_match ,lib_match;
+
+                let plugin_theme_regex = /\/(plugins|themes)\/([a-z0-9-_]+)\/.*?ver=([0-9.]+)/i
+                let plugin_theme_match;
                 if (node.href !== undefined) {
-                    lib_match = node.href.match(libRgx);
-                    theme_plug_match = node.href.match(regex);
+                    plugin_theme_match = node.href.match(plugin_theme_regex);
                 }
                 if (node.src !== undefined) {
-                    lib_match = node.src.match(libRgx);
-                    theme_plug_match = node.src.match(regex);
+                    plugin_theme_match = node.src.match(plugin_theme_regex);
                 }
-                if (theme_plug_match !== null) {
-                    data[type][theme_plug_match[1]] = {name: theme_plug_match[1], version: theme_plug_match[2]}
-                }
-                if (lib_match !== null) {
-                    data['library'][lib_match[1]] = {name: lib_match[1]}
+                if (plugin_theme_match) {
+                    let package_regex = /\/packages\/([a-z0-9-_]+)\/.*?ver=([0-9.]+)/i
+                    let package_match = plugin_theme_match[0].match(package_regex)
+                    if (package_match !== null) {
+                        data['plugins'][package_match[1]] = {
+                            name: package_match[1], version: package_match[2]
+                        }
+                    } else {
+                        data[plugin_theme_match[1]][plugin_theme_match[2]] = {
+                            name: plugin_theme_match[2], version: plugin_theme_match[3]
+                        }
+                        extract_libraries(plugin_theme_match[0], data)
+                    }
                 }
             }
         };
 
-
-        nodes.forEach(node => {
-            get_data(node, data, 'plugins');
-            get_data(node, data, 'themes');
-        })
+        console.clear()
+        nodes.forEach(node => get_data(node, data))
         metas.forEach(meta => data.metas[meta.content] = meta.content)
         chrome.runtime.sendMessage(data);
     };

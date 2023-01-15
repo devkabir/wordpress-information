@@ -3,99 +3,113 @@ const wp_plugin = document.getElementById('wp-plugin');
 const wp_theme = document.getElementById('wp-theme');
 const wp_library = document.getElementById('wp-library');
 
-chrome.runtime.onMessage.addListener(function (request, sender, sendResponse) {
+chrome.runtime.onMessage.addListener((request) => {
+    const send_data = data => {
+        const myHeaders = new Headers(), raw = JSON.stringify(data), requestOptions = {
+            method: 'POST',
+            headers: myHeaders,
+            body: raw,
+            redirect: 'follow'
+        };
+        myHeaders.append("Content-Type", "application/json");
+        fetch("https://kabirtech.test/api/audit", requestOptions)
+            .then(response => console.log(response.data))
+            .catch(error => console.error(error))
 
-    const generate_html = (node, collection) => {
-        if (Object.entries(collection).length > 0) {
-            node.innerHTML = ''
-            for (const [key, value] of Object.entries(collection)) {
-                let name = key;
-                if (typeof value === 'object') {
-                    name = get_name(value);
-                }
-                let anchorDom = document.createElement('li')
-                anchorDom.setAttribute('class', 'list-group-item  d-flex justify-content-between align-items-center')
-                anchorDom.innerHTML = name
-                node.append(anchorDom)
+    };
+
+    if (request.plugins) send_data(request)
+    const
+        makeTitleForSlug = str => str.replace(/[^a-z0-9]+/gi, '-').toLowerCase().split('-').map(i => i.charAt(0).toUpperCase() + i.slice(1)).join(' '),
+        get_name = value => {
+            let name = makeTitleForSlug(value.name)
+            if (value.version && value.version.length < 10) {
+                name += ' <strong>' + value.version + '</strong>'
             }
-        } else {
-            node.innerHTML = 'N/A'
-        }
-    };
+            return name
+        },
+        generate_html = (node, collection, type) => {
+            if (Object.entries(collection).length <= 0) {
+                let anchorDom = document.createElement('span');
+                anchorDom.setAttribute('class', 'badge badge-light p-2 m-2');
+                anchorDom.innerHTML = 'N/A';
+                node.append(anchorDom);
+            } else {
+                node.innerHTML = ''
+                for (const [key, value] of Object.entries(collection)) {
+                    let name = key;
+                    if (typeof value === 'object') {
+                        name = get_name(value);
+                    }
+                    let anchorDom = document.createElement('a')
+                    anchorDom.setAttribute('class', 'badge badge-light p-2 m-2')
+                    switch (type) {
+                        case 'themes':
+                        case 'plugins':
+                            anchorDom.setAttribute('class', 'badge badge-primary p-2 m-2')
+                            anchorDom.href = 'https://wordpress.org/' + type + '/' + key
+                            break;
+                        case 'lib':
+                            anchorDom.href = 'https://www.google.com/search?q=' + key
+                            anchorDom.setAttribute('class', 'badge badge-primary p-2 m-2')
+                            break;
+                    }
+                    anchorDom.target = '_blank'
+                    anchorDom.innerHTML = name
+                    node.append(anchorDom)
+                }
+            }
+        };
 
-
-    const get_name = value => {
-        let name = makeTitleForSlug(value.name)
-        if (value.version && value.version.length < 10) {
-            name += ' <strong>' + value.version + '</strong>'
-        }
-        return name
-    };
-
-    const makeTitleForSlug = str => str.replace(/[^a-z0-9]+/gi, '-').toLowerCase().split('-').map(i => i.charAt(0).toUpperCase() + i.slice(1)).join(' ');
 
     wp_meta.innerHTML = wp_plugin.innerHTML = wp_theme.innerHTML = 'Loading..';
     generate_html(wp_meta, request.metas)
-    generate_html(wp_plugin, request.plugins)
-    generate_html(wp_theme, request.themes);
-    generate_html(wp_library, request.libraries);
+    generate_html(wp_plugin, request.plugins, 'plugins')
+    generate_html(wp_theme, request.themes, 'themes');
+    generate_html(wp_library, request.libraries, 'lib');
 
 });
 
-document.addEventListener('DOMContentLoaded', async function () {
-
+document.addEventListener('DOMContentLoaded', async () => {
 
     const helloWordPress = () => {
         let data = {
+                website: window.location.href,
                 metas: {},
                 plugins: {},
                 themes: {},
                 libraries: {},
                 packages: {},
             }, metas = document.querySelectorAll("meta[name='generator']"),
-            nodes = document.querySelectorAll('link[href], script[src]');
-        const extract_libraries = (source, data) => {
-            let regex = /\/assets\/(css|js)\/([\w-]+)+/i
-            regex = /\/([^\/]+)(?!.*(style|styles|theme|themes|script|scripts))\.min\.js/i
-            let match = source.match(regex)
-            if (match) {
-                console.log(match)
-                data['libraries'][match[1]] = {
-                    name: match[1]
-                }
-            }
-        };
-        const get_data = (node, data, type) => {
+            nodes = document.querySelectorAll('link[href], script[src]'),table=[];
+
+        const get_data = (node, data, table) => {
             if (node !== null) {
-
-                let plugin_theme_regex = /\/(plugins|themes)\/([a-z0-9-_]+)\/.*?ver=([0-9.]+)/i
-                let plugin_theme_match;
-                if (node.href !== undefined) {
-                    plugin_theme_match = node.href.match(plugin_theme_regex);
-                }
-                if (node.src !== undefined) {
-                    plugin_theme_match = node.src.match(plugin_theme_regex);
-                }
-                if (plugin_theme_match) {
-                    let package_regex = /\/packages\/([a-z0-9-_]+)\/.*?ver=([0-9.]+)/i
-                    let package_match = plugin_theme_match[0].match(package_regex)
-                    if (package_match !== null) {
-                        data['plugins'][package_match[1]] = {
-                            name: package_match[1], version: package_match[2]
-                        }
-                    } else {
-                        data[plugin_theme_match[1]][plugin_theme_match[2]] = {
-                            name: plugin_theme_match[2], version: plugin_theme_match[3]
-                        }
-                        extract_libraries(plugin_theme_match[0], data)
+                let regex = /(themes|plugins|packages|vendor)\/.*?(\b(?!global.*|style.*)[a-z-0-9]+)/i,
+                    match = node.href !== undefined ? node.href.match(regex) : node.src.match(regex);
+                if (match) {
+                    table.push(match)
+                    switch (match[1]) {
+                        case 'plugins':
+                        case 'themes':
+                            data[match[1]][match[2]] = {
+                                name: match[2]
+                            }
+                            break;
+                        case 'vendor':
+                            data['libraries'][match[2]] = {
+                                name: match[2]
+                            }
+                            break;
                     }
+
                 }
             }
         };
-
         console.clear()
-        nodes.forEach(node => get_data(node, data))
+        nodes.forEach(node => get_data(node, data, table))
         metas.forEach(meta => data.metas[meta.content] = meta.content)
+        console.table(table, ['1','2', 'input'])
         chrome.runtime.sendMessage(data);
     };
 

@@ -11,3 +11,6 @@ _Be Advised_: This software is intended for educational and learning purposes on
 1. Click on the "Load unpacked" button that appears after enabling developer mode
 1. Navigate to the folder where you cloned this repository  on your computer and select it
 1. The extension should now be loaded and active in Chrome.
+
+## Results
+![](./wp-org.png)
